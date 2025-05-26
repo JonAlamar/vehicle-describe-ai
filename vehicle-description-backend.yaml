@@ -49,7 +49,7 @@ Resources:
       Environment:
         Variables:
           BUCKET_NAME: !Ref VehicleFeedBucketName
-          CSV_KEY: inventory.csv
+          CSV_KEY: MP8035.csv
 
   VehicleDescriptionAPI:
     Type: AWS::ApiGateway::RestApi
