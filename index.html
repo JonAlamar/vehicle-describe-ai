@@ -1,0 +1,76 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Vehicle Description Generator</title>
+  <style>
+    body { font-family: Arial, sans-serif; max-width: 700px; margin: 2em auto; padding: 1em; }
+    label, textarea, input, button { display: block; margin-top: 1em; width: 100%; }
+    textarea { height: 120px; }
+    .result-box { margin-top: 2em; background: #f6f6f6; padding: 1em; border: 1px solid #ccc; }
+  </style>
+</head>
+<body>
+  <h1>Vehicle Description Generator</h1>
+
+  <label for="stock">Stock Number:</label>
+  <input type="text" id="stock" placeholder="e.g., 19656" />
+
+  <button onclick="lookupVehicle()">Lookup Vehicle</button>
+
+  <div id="vehicle-info"></div>
+
+  <label for="options">Key Options (comma separated):</label>
+  <textarea id="options" placeholder="e.g., Clean Carfax, leather seats, navigation"></textarea>
+
+  <button onclick="generateDescription()">Generate Description</button>
+
+  <div id="result" class="result-box" style="display: none;">
+    <h3>Description:</h3>
+    <p id="description-text"></p>
+  </div>
+
+  <script>
+    const apiBase = "https://k7cjyq0pdj.execute-api.us-east-1.amazonaws.com/dev";
+
+    async function lookupVehicle() {
+      const stock = document.getElementById("stock").value.trim();
+      if (!stock) return alert("Enter a stock number");
+
+      const res = await fetch(`${apiBase}/lookup?stock=${stock}`);
+      const data = await res.json();
+
+      if (data.error) {
+        document.getElementById("vehicle-info").innerText = "Vehicle not found.";
+        return;
+      }
+
+      document.getElementById("vehicle-info").innerHTML = `
+        <strong>Vehicle:</strong> ${data.year} ${data.make} ${data.model} ${data.trim}<br>
+        <strong>Drivetrain:</strong> ${data.drivetrain}<br>
+        <strong>Odometer:</strong> ${data.mileage} miles<br>
+        <strong>Transmission:</strong> ${data.transmission}
+      `;
+    }
+
+    async function generateDescription() {
+      const stock = document.getElementById("stock").value.trim();
+      const options = document.getElementById("options").value.trim();
+
+      if (!stock || !options) return alert("Enter both stock number and options");
+
+      const res = await fetch(`${apiBase}/generate?stock=${stock}&options=${encodeURIComponent(options)}`);
+      const data = await res.json();
+
+      if (data.description) {
+        document.getElementById("result").style.display = "block";
+        document.getElementById("description-text").innerText = data.description;
+      } else {
+        alert("Error generating description");
+      }
+    }
+  </script>
+</body>
+</html>

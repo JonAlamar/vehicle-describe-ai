@@ -1,0 +1,89 @@
+
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Frontend infrastructure for Vehicle Description Generator (SPA) hosted on S3 with optional CloudFront
+
+Parameters:
+  FrontendBucketName:
+    Type: String
+    Description: S3 bucket name for hosting the frontend application
+
+  CustomDomainName:
+    Type: String
+    Default: ""
+    Description: (Optional) Custom domain name for CloudFront, e.g., describe.wallingfordautopark.com
+
+Resources:
+  FrontendS3Bucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Ref FrontendBucketName
+      WebsiteConfiguration:
+        IndexDocument: index.html
+        ErrorDocument: index.html
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: false
+        BlockPublicPolicy: false
+        IgnorePublicAcls: false
+        RestrictPublicBuckets: false
+
+  S3BucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref FrontendS3Bucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: "*"
+            Action: "s3:GetObject"
+            Resource: !Sub "arn:aws:s3:::${FrontendBucketName}/*"
+
+  CloudFrontOriginAccessControl:
+    Type: AWS::CloudFront::OriginAccessControl
+    Properties:
+      OriginAccessControlConfig:
+        Name: "FrontendOAC"
+        Description: "OAC for frontend S3 bucket"
+        OriginAccessControlOriginType: s3
+        SigningBehavior: always
+        SigningProtocol: sigv4
+
+  FrontendCloudFrontDistribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        DefaultRootObject: index.html
+        Origins:
+          - Id: S3Origin
+            DomainName: !Sub "${FrontendBucketName}.s3.amazonaws.com"
+            S3OriginConfig: {}
+            OriginAccessControlId: !Ref CloudFrontOriginAccessControl
+        DefaultCacheBehavior:
+          TargetOriginId: S3Origin
+          ViewerProtocolPolicy: redirect-to-https
+          AllowedMethods: ["GET", "HEAD"]
+          CachedMethods: ["GET", "HEAD"]
+          ForwardedValues:
+            QueryString: false
+            Cookies:
+              Forward: none
+        ViewerCertificate:
+          CloudFrontDefaultCertificate: true
+        Aliases:
+          Fn::If:
+            - UseCustomDomain
+            - [!Ref CustomDomainName]
+            - !Ref "AWS::NoValue"
+
+Conditions:
+  UseCustomDomain: !Not [!Equals [!Ref CustomDomainName, ""]]
+
+Outputs:
+  WebsiteURL:
+    Description: S3 static website URL
+    Value: !Sub "http://${FrontendBucketName}.s3-website-${AWS::Region}.amazonaws.com"
+
+  CloudFrontURL:
+    Description: CloudFront distribution domain
+    Value: !GetAtt FrontendCloudFrontDistribution.DomainName

@@ -1,0 +1,85 @@
+
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Backend infrastructure for Vehicle Description Generator using Amazon Bedrock
+
+Parameters:
+  VehicleFeedBucketName:
+    Type: String
+    Description: Name of the S3 bucket that contains the vehicle CSV file
+
+Resources:
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: BedrockAccessPolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:*
+                Resource: "*"
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                Resource: !Sub arn:aws:s3:::${VehicleFeedBucketName}/*
+              - Effect: Allow
+                Action:
+                  - bedrock:InvokeModel
+                Resource: "*"
+
+  GenerateDescriptionFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Handler: index.handler
+      Runtime: python3.12
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Timeout: 30
+      MemorySize: 128
+      Environment:
+        Variables:
+          BUCKET_NAME: !Ref VehicleFeedBucketName
+          CSV_KEY: MP8035.csv
+      Code:
+        S3Bucket: vautofeed-wallingford-sftpgo
+        S3Key: lambda.zip
+
+  VehicleDescriptionAPI:
+    Type: AWS::ApiGateway::RestApi
+    Properties:
+      Name: VehicleDescriptionAPI
+
+  RootMethodLookup:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref VehicleDescriptionAPI
+      ResourceId: !GetAtt VehicleDescriptionAPI.RootResourceId
+      HttpMethod: GET
+      AuthorizationType: NONE
+      RequestParameters:
+        method.request.querystring.stock: true
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${GenerateDescriptionFunction.Arn}/invocations
+
+  LambdaInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref GenerateDescriptionFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${VehicleDescriptionAPI}/*/GET/
+
+Outputs:
+  ApiGatewayUrl:
+    Description: Base URL for the Vehicle Description API
+    Value: !Sub https://${VehicleDescriptionAPI}.execute-api.${AWS::Region}.amazonaws.com
