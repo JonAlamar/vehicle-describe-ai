@@ -5,11 +5,11 @@ import json
 import os
 import logging
 
-logger = logging.getLogger()
-logger.setLevel(logging.INFO)
-
 s3 = boto3.client("s3")
 bedrock = boto3.client("bedrock-runtime")
+
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
 
 def response(status, body):
     return {
@@ -25,7 +25,7 @@ def handler(event, context):
     try:
         bucket = os.environ["BUCKET_NAME"]
         key = os.environ["CSV_KEY"]
-        path = event["path"]  # Will be /lookup or /generate
+        path = event["path"]
         query = event.get("queryStringParameters") or {}
         stock_number = query.get("stock")
         options = query.get("options")
@@ -33,12 +33,10 @@ def handler(event, context):
         if not stock_number:
             return response(400, {"error": "Missing stock number"})
 
-        # Load the CSV from S3
         s3_object = s3.get_object(Bucket=bucket, Key=key)
         lines = s3_object["Body"].read().decode("utf-8").splitlines()
         reader = csv.DictReader(lines)
 
-        # Match stock number
         row = next((r for r in reader if r["stock_number"] == stock_number), None)
         if not row:
             return response(404, {"error": "Stock not found"})
@@ -77,7 +75,7 @@ Rules:
 - Do not mention vehicle condition.
 - Avoid hype or assumptions—just factual, friendly copy.
 
-Vehicle: {row["year"]} {row["make"]} {row["model"]} {row["Trim"]}
+Vehicle: {row["year"]} {row["make"]} {row["model"]} {row.get("Trim", "")}
 Mileage: {row["mileage.value"]} miles
 Transmission: {row["transmission"]}
 {f"Drivetrain: {row["drivetrain"]}" if show_drivetrain else ""}
@@ -91,16 +89,24 @@ Write a 3-4 sentence description.
                 contentType="application/json",
                 accept="application/json",
                 body=json.dumps({
-                    "prompt": f"\n\nHuman: {prompt}\n\nAssistant:",
-                    "max_tokens_to_sample": 300,
-                    "temperature": 0.7
+                    "messages": [
+                        {
+                            "role": "user",
+                            "content": prompt
+                        }
+                    ],
+                    "max_tokens": 300,
+                    "temperature": 0.7,
+                    "anthropic_version": "bedrock-2023-05-31"
                 })
             )
+
             result = json.loads(completion["body"].read().decode())
+            description = intro + result["content"][0]["text"].strip()
 
             return response(200, {
                 "vehicle": vehicle_data,
-                "description": intro + result["completion"].strip()
+                "description": description
             })
 
         return response(400, {"error": "Unknown path"})
