@@ -1,11 +1,11 @@
 
 AWSTemplateFormatVersion: '2010-09-09'
-Description: Backend infrastructure for Vehicle Description Generator using Amazon Bedrock
+Description: Backend for vehicle description generator with API Gateway and Lambda
 
 Parameters:
   VehicleFeedBucketName:
     Type: String
-    Description: Name of the S3 bucket that contains the vehicle CSV file
+    Description: Name of the S3 bucket containing inventory.csv
 
 Resources:
   LambdaExecutionRole:
@@ -19,67 +19,104 @@ Resources:
               Service: lambda.amazonaws.com
             Action: sts:AssumeRole
       Policies:
-        - PolicyName: BedrockAccessPolicy
+        - PolicyName: AllowS3AndLogs
           PolicyDocument:
             Version: "2012-10-17"
             Statement:
-              - Effect: Allow
-                Action:
-                  - logs:*
-                Resource: "*"
               - Effect: Allow
                 Action:
                   - s3:GetObject
                 Resource: !Sub arn:aws:s3:::${VehicleFeedBucketName}/*
               - Effect: Allow
                 Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
                   - bedrock:InvokeModel
                 Resource: "*"
 
   GenerateDescriptionFunction:
     Type: AWS::Lambda::Function
     Properties:
-      Handler: index.handler
+      FunctionName: GenerateVehicleDescription
       Runtime: python3.12
+      Handler: index.handler
       Role: !GetAtt LambdaExecutionRole.Arn
+      Code:
+        S3Bucket: !Ref VehicleFeedBucketName
+        S3Key: lambda.zip
       Timeout: 30
       MemorySize: 128
       Environment:
         Variables:
           BUCKET_NAME: !Ref VehicleFeedBucketName
           CSV_KEY: MP8035.csv
-      Code:
-        S3Bucket: vautofeed-wallingford-sftpgo
-        S3Key: lambda.zip
 
   VehicleDescriptionAPI:
     Type: AWS::ApiGateway::RestApi
     Properties:
       Name: VehicleDescriptionAPI
+      EndpointConfiguration:
+        Types: [REGIONAL]
 
-  RootMethodLookup:
+  LookupResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      ParentId: !GetAtt VehicleDescriptionAPI.RootResourceId
+      PathPart: lookup
+      RestApiId: !Ref VehicleDescriptionAPI
+
+  GenerateResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      ParentId: !GetAtt VehicleDescriptionAPI.RootResourceId
+      PathPart: generate
+      RestApiId: !Ref VehicleDescriptionAPI
+
+  LookupMethod:
     Type: AWS::ApiGateway::Method
     Properties:
-      RestApiId: !Ref VehicleDescriptionAPI
-      ResourceId: !GetAtt VehicleDescriptionAPI.RootResourceId
-      HttpMethod: GET
       AuthorizationType: NONE
-      RequestParameters:
-        method.request.querystring.stock: true
+      HttpMethod: GET
+      ResourceId: !Ref LookupResource
+      RestApiId: !Ref VehicleDescriptionAPI
       Integration:
         Type: AWS_PROXY
         IntegrationHttpMethod: POST
-        Uri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${GenerateDescriptionFunction.Arn}/invocations
+        Uri: !Sub
+          - arn:aws:apigateway:${Region}:lambda:path/2015-03-31/functions/${LambdaArn}/invocations
+          - { Region: !Ref "AWS::Region", LambdaArn: !GetAtt GenerateDescriptionFunction.Arn }
+
+  GenerateMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      AuthorizationType: NONE
+      HttpMethod: GET
+      ResourceId: !Ref GenerateResource
+      RestApiId: !Ref VehicleDescriptionAPI
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub
+          - arn:aws:apigateway:${Region}:lambda:path/2015-03-31/functions/${LambdaArn}/invocations
+          - { Region: !Ref "AWS::Region", LambdaArn: !GetAtt GenerateDescriptionFunction.Arn }
 
   LambdaInvokePermission:
     Type: AWS::Lambda::Permission
     Properties:
-      Action: lambda:InvokeFunction
       FunctionName: !Ref GenerateDescriptionFunction
+      Action: lambda:InvokeFunction
       Principal: apigateway.amazonaws.com
-      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${VehicleDescriptionAPI}/*/GET/
+      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${VehicleDescriptionAPI}/*/*
+
+  Deployment:
+    Type: AWS::ApiGateway::Deployment
+    DependsOn: [LookupMethod, GenerateMethod]
+    Properties:
+      RestApiId: !Ref VehicleDescriptionAPI
+      StageName: dev
 
 Outputs:
   ApiGatewayUrl:
-    Description: Base URL for the Vehicle Description API
-    Value: !Sub https://${VehicleDescriptionAPI}.execute-api.${AWS::Region}.amazonaws.com
+    Description: API Gateway base URL
+    Value: !Sub https://${VehicleDescriptionAPI}.execute-api.${AWS::Region}.amazonaws.com/dev
