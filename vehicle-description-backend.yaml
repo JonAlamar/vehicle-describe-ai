@@ -32,6 +32,7 @@ Resources:
                   - logs:CreateLogGroup
                   - logs:CreateLogStream
                   - logs:PutLogEvents
+                  - bedrock:InvokeModel
                 Resource: "*"
 
   GenerateDescriptionFunction:
