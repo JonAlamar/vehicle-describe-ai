@@ -77,7 +77,7 @@ Rules:
 - Do not mention vehicle condition.
 - Avoid hype or assumptions—just factual, friendly copy.
 
-Vehicle: {row["year"]} {row["make"]} {row["model"]} {row["trim"]}
+Vehicle: {row["year"]} {row["make"]} {row["model"]} {row["Trim"]}
 Mileage: {row["mileage.value"]} miles
 Transmission: {row["transmission"]}
 {f"Drivetrain: {row["drivetrain"]}" if show_drivetrain else ""}
