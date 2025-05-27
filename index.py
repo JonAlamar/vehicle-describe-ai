@@ -102,4 +102,5 @@ Write a 3-4 sentence description.
         return response(400, {"error": "Unknown path"})
 
     except Exception as e:
+        logger.exception("Unhandled error:")
         return response(500, {"error": f"Internal server error: {str(e)}"})
