@@ -3,6 +3,7 @@ import boto3
 import csv
 import json
 import os
+import logging
 
 s3 = boto3.client("s3")
 bedrock = boto3.client("bedrock-runtime")
