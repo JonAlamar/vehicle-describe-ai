@@ -26,7 +26,7 @@ Resources:
               - Effect: Allow
                 Action:
                   - s3:GetObject
-                Resource: !Sub arn:aws:s3:::${VehicleFeedBucketName}/inventory.csv
+                Resource: !Sub arn:aws:s3:::${VehicleFeedBucketName}/*
               - Effect: Allow
                 Action:
                   - logs:CreateLogGroup
