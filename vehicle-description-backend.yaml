@@ -34,6 +34,10 @@ Resources:
                   - logs:PutLogEvents
                   - bedrock:InvokeModel
                 Resource: "*"
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                  Resource: "arn:aws:secretsmanager:us-east-1:393800486110:secret:vehicle-generator/openai-api-key-zuUAK0"
 
   GenerateDescriptionFunction:
     Type: AWS::Lambda::Function
